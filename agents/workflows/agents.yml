@@ -67,7 +67,11 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      # A queued push run would otherwise check out its own, possibly older, sha and base the PR
+      # on it; the branch must be rebuilt from main as it is when the run starts.
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - name: Read the pin
         id: pin
         run: |

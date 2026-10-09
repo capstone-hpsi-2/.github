@@ -50,8 +50,8 @@ b=$(git branch --show-current); [[ -z $b || $b == main || $b == chore/sync-* ]] 
 2. Run the repo gate and the `all` row from the "Gates" table in `AGENTS.md`. Keep the output. Red gate: fix, commit, rerun.
    A backend change to `openapi/*.yaml` also typechecks the frontend against it, since the PR's `contract-frontend` check runs the same. Needs sibling checkouts `../frontend` (clean, on current `main`, `npm ci` done) and the other backend:
    ```bash
-   cd ../frontend && if [[ -n $(git status --porcelain) ]]; then echo "STOP: ../frontend has local changes"; else
-     ./scripts/sync-contracts.sh --local && npm run typecheck; git checkout -- contracts src/api/generated; fi; cd -
+   (cd ../frontend && if [[ -n $(git status --porcelain) ]]; then echo "STOP: ../frontend has local changes"; else
+     ./scripts/sync-contracts.sh --local && npm run typecheck; rc=$?; git checkout -- contracts src/api/generated; exit $rc; fi)
    ```
    Red: the change breaks the frontend. Coordinate a frontend PR and link it in this PR.
 3. Adversarial self-review. Spawn 4 subagents in parallel, fresh context each, one lens each, none seeing the others' output:
