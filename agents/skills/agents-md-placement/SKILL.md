@@ -25,14 +25,14 @@ description: Decide where a new rule, convention, fact or lesson belongs in the 
 Write rules as one imperative line, with the reason when it is not obvious.
 
 ## Changing a shared rule or skill
-1. Fork and PR `capstone-hpsi-2/.github`, editing `agents/AGENTS.shared.md` or `agents/skills/<name>/`.
-2. After merge, in each repo on a `feat/` branch:
+1. PR to `capstone-hpsi-2/.github` (skill `create-pr`), editing `agents/AGENTS.shared.md`, `agents/skills/<name>/`, or the guard files in `agents/` (layout: `agents/README.md`). A new shared skill also needs a row in the Skills table.
+2. After merge, each repo's daily `agents` workflow opens or updates one PR on `chore/sync-agents`. Review and merge it. To adopt sooner, run the workflow by hand (Actions, `agents`, Run workflow), or on a `feat/` branch:
    ```bash
-   ./scripts/sync-agents.sh --latest --check   # preview, writes nothing
-   ./scripts/sync-agents.sh --latest           # pin, rewrite block, skills and mirror
-   git add AGENTS.md agents.lock.json .agents/skills .claude/skills
+   bash scripts/sync-agents.sh --latest --check   # preview, writes nothing
+   bash scripts/sync-agents.sh --latest           # pin, then rewrite every generated file
+   git status --short                             # stage exactly these paths
    ```
-3. A new shared skill also goes into the `skills` list of each repo's `agents.lock.json`.
+3. Preview a `.github` change before it merges: `bash scripts/sync-agents.sh --local ../.github` in a scratch branch, never committed.
 
 ## Examples
 - "Run an Alembic up/down/up round trip on Postgres before a migration PR." Both backends use Alembic: **shared block**, one line.

@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Understand or review someone else's pull request in admin-backend, transcription-backend or frontend. Produces P0/P1/P2 findings anchored to file:line, checked against the design it implements, with the repo gate actually run. Use for "review PR #N", "what does this PR do", "is this safe to merge". Not for your own branch (that is the self-review in feature-branch).
+description: Understand or review someone else's pull request in admin-backend, transcription-backend or frontend. Produces P0/P1/P2 findings anchored to file:line, checked against the design it implements, with the repo gate actually run. Use for "review PR #N", "what does this PR do", "is this safe to merge". Not for your own branch (that is the self-review in create-pr).
 ---
 
 # PR review

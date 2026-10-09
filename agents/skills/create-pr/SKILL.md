@@ -1,20 +1,22 @@
 ---
-name: feature-branch
-description: Start, resume, or finish a feature branch in admin-backend, transcription-backend or frontend. Use for "start a feature", "new branch", "continue my branch", "rebase on main", "get this ready for a PR", "open a PR", "push my work". Covers branch naming, rebasing on origin/main, the repo gate, the adversarial self-review with subagents, and gh pr create. Not for reviewing someone else's PR (use pr-review).
+name: create-pr
+description: Use before the first edit whenever you or the user start creating, changing, fixing or editing a feature, or any code, config or docs, in admin-backend, transcription-backend, frontend or .github, and again to finish it. Every change reaches main only through a PR from a feat/<member>-<featname> branch, so this covers the whole path - start or resume the branch, rebase on origin/main, run the repo gate, run the adversarial self-review with subagents, push and gh pr create. Also for "start a feature", "fix this", "change X", "new branch", "continue my branch", "rebase on main", "open a PR", "push my work". Not for reviewing someone else's PR (use pr-review).
 ---
 
-# Feature branch
+# Create PR
+
+Every change, however small, goes start (or continue) then finish. Run Start or Continue before the first edit, not after.
 
 Commands are Bash and run in Git Bash on Windows and on Linux. On Windows use `python`, not `python3` (often a Store stub).
 
 ## Stop rules (check every time)
 Refuse and explain if the next step would:
-- commit or push while on `main` or a detached HEAD,
+- commit or push while on `main`, a detached HEAD, or `chore/sync-agents` (owned by the agents sync job),
 - push to `main` in any form,
 - use `--no-verify`, or `--force` without `--with-lease`.
 
 ```bash
-b=$(git branch --show-current); [[ -z $b || $b == main ]] && echo "STOP: switch to a feature branch"
+b=$(git branch --show-current); [[ -z $b || $b == main || $b == chore/sync-agents ]] && echo "STOP: switch to a feature branch"
 ```
 
 ## Start
