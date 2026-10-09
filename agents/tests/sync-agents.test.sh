@@ -6,6 +6,9 @@
 #
 #   bash agents/tests/sync-agents.test.sh
 set -uo pipefail
+# The script skips the workflow copy when GITHUB_ACTIONS is set, and the runner sets it. The
+# "outside CI" cases need it unset; the CI case below sets it explicitly.
+unset GITHUB_ACTIONS
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]//\\//}")" && pwd)
 src_root=$(cd "$here/../.." && pwd)
