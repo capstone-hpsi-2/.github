@@ -1,0 +1,41 @@
+# Tells each app repo that agents/ changed on main, so its agents workflow opens or updates the
+# chore/sync-agents PR within minutes instead of at the next daily run. The event name
+# agents-changed is what those workflows listen for; renaming it breaks them.
+#
+# GITHUB_TOKEN cannot send repository_dispatch to another repo, so this needs the SYNC_TOKEN
+# secret. A failed run only delays adoption until the daily sync, but it fails loudly so the
+# missing or expired token gets fixed.
+name: agents-dispatch
+
+on:
+  push:
+    branches: [main]
+    paths: ["agents/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send agents-changed to the app repos
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::SYNC_TOKEN secret is not set: the app repos will pick up this change only at their daily sync."
+            exit 1
+          fi
+          failed=0
+          for repo in admin-backend frontend transcription-backend; do
+            if gh api "repos/$OWNER/$repo/dispatches" -f event_type=agents-changed -f "client_payload[sha]=$GITHUB_SHA" --silent; then
+              echo "agents-changed -> $OWNER/$repo"
+            else
+              echo "::error::Could not dispatch to $OWNER/$repo. Check that SYNC_TOKEN covers it with Contents read and write, and has not expired."
+              failed=1
+            fi
+          done
+          exit "$failed"

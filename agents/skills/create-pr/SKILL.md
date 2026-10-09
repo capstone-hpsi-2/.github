@@ -11,12 +11,12 @@ Commands are Bash and run in Git Bash on Windows and on Linux. On Windows use `p
 
 ## Stop rules (check every time)
 Refuse and explain if the next step would:
-- commit or push while on `main`, a detached HEAD, or `chore/sync-agents` (owned by the agents sync job),
+- commit or push while on `main`, a detached HEAD, `chore/sync-agents` or `chore/sync-contracts` (owned by the sync jobs),
 - push to `main` in any form,
 - use `--no-verify`, or `--force` without `--with-lease`.
 
 ```bash
-b=$(git branch --show-current); [[ -z $b || $b == main || $b == chore/sync-agents ]] && echo "STOP: switch to a feature branch"
+b=$(git branch --show-current); [[ -z $b || $b == main || $b == chore/sync-* ]] && echo "STOP: switch to a feature branch"
 ```
 
 ## Start
@@ -32,12 +32,28 @@ b=$(git branch --show-current); [[ -z $b || $b == main || $b == chore/sync-agent
 ## Continue
 1. `git fetch origin --prune && git checkout <branch>` (only on the remote: `git checkout --track origin/<branch>`).
 2. Stash local changes if any, then `git rebase origin/main`.
-3. On conflict: keep both intents. Never hand-merge generated files; regenerate them: `python -m app.export_openapi`, `./scripts/sync-contracts.sh`, and for agent files `git checkout --ours agents.lock.json` first (in a rebase, `--ours` is main's pin), then `bash scripts/sync-agents.sh`. Then `git add <file> && git rebase --continue`. If you do not understand the other side, `git rebase --abort` and ask its author (`git log origin/main -- <file>`).
+3. On conflict: keep both intents. Never hand-merge generated files: take main's side (in a rebase `--ours` is main), regenerate, continue. The `chore/sync-agents` and `chore/sync-contracts` PRs touch these files often.
+   ```bash
+   # agent files: the sync rewrites every generated file, conflicted ones included
+   git checkout --ours agents.lock.json .claude/skills && bash scripts/sync-agents.sh
+   # frontend contracts
+   git checkout --ours contracts.lock.json contracts src/api/generated && GITHUB_TOKEN=$(gh auth token) ./scripts/sync-contracts.sh
+   # backend spec
+   python -m app.export_openapi
+   git add <the conflicted paths> && git rebase --continue
+   ```
+   If your branch changed a lock on purpose, re-apply that change before the sync. If you do not understand the other side, `git rebase --abort` and ask its author (`git log origin/main -- <file>`).
 4. Run the gate before writing new code so you know the base is green.
 
 ## Finish (before every PR, in order)
 1. Rebase again: `git fetch origin --prune && git rebase origin/main`. A gate run before this does not count.
 2. Run the repo gate and the `all` row from the "Gates" table in `AGENTS.md`. Keep the output. Red gate: fix, commit, rerun.
+   A backend change to `openapi/*.yaml` also typechecks the frontend against it, since the PR's `contract-frontend` check runs the same. Needs sibling checkouts `../frontend` (clean, on current `main`, `npm ci` done) and the other backend:
+   ```bash
+   cd ../frontend && if [[ -n $(git status --porcelain) ]]; then echo "STOP: ../frontend has local changes"; else
+     ./scripts/sync-contracts.sh --local && npm run typecheck; git checkout -- contracts src/api/generated; fi; cd -
+   ```
+   Red: the change breaks the frontend. Coordinate a frontend PR and link it in this PR.
 3. Adversarial self-review. Spawn 4 subagents in parallel, fresh context each, one lens each, none seeing the others' output:
 
    | Lens | Looks for |

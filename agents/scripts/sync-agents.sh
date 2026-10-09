@@ -32,8 +32,9 @@ SYNCED_FILES=(
   scripts/agents-guard.sh:$GUARD
   scripts/sync-agents.sh:scripts/sync-agents.sh
 )
-# Copied only when run outside GitHub Actions: GITHUB_TOKEN may not push workflow files, so the
-# daily sync PR would fail to push. --check only warns about it for the same reason.
+# In GitHub Actions this is copied only with AGENTS_SYNC_WORKFLOW=1, which the sync job sets when it
+# pushes with SYNC_TOKEN: GITHUB_TOKEN may not push workflow files, so a sync PR that included it
+# would fail to push. --check only warns about it, since a repo without SYNC_TOKEN cannot fix it in CI.
 WORKFLOW=workflows/agents.yml:.github/workflows/agents.yml
 # Agent files that only one of Claude Code and Antigravity reads (shared guardrail 8).
 RULE_FILES_RE='^(\.claude/rules/|\.agents/rules/|\.agent/rules/)|/(agents|claude|gemini)\.md$|(^|/)claude\.local\.md$'
@@ -134,7 +135,7 @@ echo "• agents <- $pin"
 
 [[ -f $src/AGENTS.shared.md ]] || { echo "error: $subdir/AGENTS.shared.md missing at the source" >&2; exit 1; }
 # Every source skill folder is shared. Taking the list from the source, not from the lock, is what
-# lets the daily sync pick up a new, renamed or removed shared skill with no hand edit here.
+# lets the sync job pick up a new, renamed or removed shared skill with no hand edit here.
 skills=
 for dir in "$src/skills"/*/; do
   [[ -d $dir ]] || continue
@@ -233,7 +234,7 @@ if $CHECK; then
   done < <(git ls-files 2>/dev/null | grep -iE "$RULE_FILES_RE" | grep -viE '^\.(agents|claude)/skills/' || true)
   wf=${WORKFLOW#*:}
   if [[ -f $out/files/$wf ]] && ! diff -q --strip-trailing-cr "$out/files/$wf" "$wf" >/dev/null 2>&1; then
-    echo "note: $wf differs from the source. Run bash scripts/sync-agents.sh on your machine (not CI) and commit it." >&2
+    echo "note: $wf differs from the source. The chore/sync-agents PR updates it when the repo has the SYNC_TOKEN secret; else run bash scripts/sync-agents.sh on your machine and commit it." >&2
   fi
   if ((${#drift[@]})); then
     echo "Agent files differ from $pin:" >&2
@@ -243,7 +244,7 @@ if $CHECK; then
     sed 's/^/    /' "$work/mirror.diff" | head -n 20 >&2 || true
     diff -u --strip-trailing-cr --label "AGENTS.md (committed)" --label "AGENTS.md (expected)" AGENTS.md "$out/AGENTS.md" 2>/dev/null | head -n 40 >&2 || true
     if $LATEST; then
-      echo "Upstream moved. The daily agents workflow opens a chore/sync-agents PR, or run" >&2
+      echo "Upstream moved. The agents workflow opens a chore/sync-agents PR, or run" >&2
       echo "bash scripts/sync-agents.sh --latest on a feat/ branch and commit the result." >&2
     else
       echo "These files are generated (list: Generated files in AGENTS.md). Change shared files by PR" >&2
@@ -275,7 +276,7 @@ mkdir -p "$(dirname "$MIRROR")"
 cp -R "$SRC_SKILLS" "$MIRROR"
 echo "    $MIRROR mirrored from $SRC_SKILLS"
 files=("${SYNCED_FILES[@]}")
-[[ -n ${GITHUB_ACTIONS:-} ]] || files+=("$WORKFLOW")
+[[ -n ${GITHUB_ACTIONS:-} && ${AGENTS_SYNC_WORKFLOW:-} != 1 ]] || files+=("$WORKFLOW")
 for entry in "${files[@]}"; do
   dest=${entry#*:}
   [[ -f $out/files/$dest ]] || continue

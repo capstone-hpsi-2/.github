@@ -9,7 +9,7 @@
 Nothing on GitHub enforces these (no branch protection on our plan), so follow them literally.
 
 1. `main` changes only through a merged PR. Never commit on, push to, or force-push `main`. Never `--no-verify`.
-2. Branch: `feat/<member>-<featname>`, member in `andrew jered jeremiah jingkai darryl shana`, featname kebab-case. Example: `feat/shana-claim-long-poll`. The one other branch is `chore/sync-agents`, owned by the daily agents sync job: never commit to it by hand.
+2. Branch: `feat/<member>-<featname>`, member in `andrew jered jeremiah jingkai darryl shana`, featname kebab-case. Example: `feat/shana-claim-long-poll`. The other branches are `chore/sync-agents` and `chore/sync-contracts`, owned by the sync jobs: never commit to them by hand.
 3. Before a PR: `git fetch origin && git rebase origin/main`, run the repo gate on the rebased tree, then an adversarial self-review by your own independent subagents (skill `create-pr`).
 4. Names say what the thing is, units included: `claim_next_job`, `lease_timeout_s`. Not `handle`, `data2`, `utils2.py`.
 5. Comments explain WHY or HOW, never WHAT. Delete WHAT comments on lines you touch.
@@ -44,7 +44,7 @@ Once code exists for something a doc describes (routes, tables, templates), the 
 
 ### Cascade
 - A changed decision updates its one home in the same PR and removes every stale mention. Before the PR, grep all three repos for the old term: `git grep -n "<old term>"`.
-- A backend route or schema change regenerates `openapi/openapi.yaml` (`python -m app.export_openapi`) in the same PR. The frontend then bumps `contracts.lock.json` and runs `./scripts/sync-contracts.sh`.
+- A backend route or schema change regenerates `openapi/openapi.yaml` (`python -m app.export_openapi`) in the same PR. The frontend adopts it through its `chore/sync-contracts` PR; when the PR's `contract-frontend` check is red, the change breaks the frontend, so coordinate a frontend PR.
 
 ### Generated files
 `scripts/sync-agents.sh` writes these from `capstone-hpsi-2/.github` `agents/`. Never edit them in a repo: a hook refuses agent edits to them, and `sync-agents.sh --check` in CI backs it up. Where the change goes instead:
@@ -54,7 +54,7 @@ Once code exists for something a doc describes (routes, tables, templates), the 
 - `agents.lock.json`: `bash scripts/sync-agents.sh --latest`. In a rebase conflict: `git checkout --ours agents.lock.json` (main's pin), then `bash scripts/sync-agents.sh`.
 - Personal Claude Code settings: `.claude/settings.local.json`, not committed.
 
-Merged `.github` changes arrive through a daily PR on `chore/sync-agents`; review and merge it like any PR. Start Claude Code and Antigravity in a repo root, not in a folder holding several repos: the hooks load only from the folder a session starts in (for Claude Code in a parent folder, see the user-level hook in `.github` `agents/README.md`).
+Merged `.github` changes arrive within minutes through a PR on `chore/sync-agents`; review and merge it like any PR. Start Claude Code and Antigravity in a repo root, not in a folder holding several repos: the hooks load only from the folder a session starts in (for Claude Code in a parent folder, see the user-level hook in `.github` `agents/README.md`).
 
 ### Skills
 Repo-local skills go in `.agents/skills/<name>/SKILL.md`, listed under `### Repo-local skills` in the specifics section (this table is shared). Then run `bash scripts/sync-agents.sh` to copy them to `.claude/skills/`.

@@ -2,10 +2,13 @@
 # check: PRs and pushes to main fail if a generated agent file (list: "Generated files" in
 # AGENTS.md) differs from the pinned .github commit. The agent hooks refuse such edits up front;
 # this is the backstop for edits made outside an agent.
-# sync: daily, adopt the newest capstone-hpsi-2/.github agents/ through one PR.
+# sync: adopt the newest capstone-hpsi-2/.github agents/ through one PR on chore/sync-agents.
+# .github sends the agents-changed dispatch when agents/ changes on its main; a push to this
+# repo's main rebuilds the PR on the new base; the daily run catches a lost dispatch.
 #
-# scripts/sync-agents.sh copies this file only when run on a machine, never in this workflow:
-# GITHUB_TOKEN may not push changes to workflow files, so the sync PR would fail to push.
+# The PR is pushed with the SYNC_TOKEN secret (a member's fine-grained PAT), so CI runs on it and
+# it may include this file. Without the secret the job falls back to GITHUB_TOKEN: the PR then
+# leaves this file out and runs no CI until closed and reopened.
 name: agents
 
 on:
@@ -15,6 +18,8 @@ on:
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
+  repository_dispatch:
+    types: [agents-changed]
 
 permissions:
   contents: read
@@ -30,8 +35,8 @@ jobs:
         run: |
           if grep -q '"sha": "BOOTSTRAP"' agents.lock.json; then echo bootstrap=true >> "$GITHUB_OUTPUT"; fi
       # Until the .github PR merges there is no pinned upstream to fetch, so only the parts
-      # checkable inside this repo are checked. The mode test matters here because the daily
-      # sync, which would commit the bit, does not run during BOOTSTRAP.
+      # checkable inside this repo are checked. The mode test matters here because the sync,
+      # which would commit the bit, does not run during BOOTSTRAP.
       - name: Mirror, CLAUDE.md and guard mode (BOOTSTRAP only)
         if: steps.pin.outputs.bootstrap == 'true'
         run: |
@@ -48,9 +53,13 @@ jobs:
         run: echo "Generated agent files changed by hand. See the lines above and 'Generated files' in AGENTS.md (skill agents-md-placement)."
 
   sync:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'repository_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
-    # A scheduled and a manual run at once would both push chore/sync-agents.
+    # A dispatch and a merge to main close together would both push chore/sync-agents. Queued, not
+    # cancelled: every run rebuilds the branch from the current main and the newest .github, so
+    # the last one to finish is always right.
     concurrency:
       group: agents-sync
       cancel-in-progress: false
@@ -66,40 +75,54 @@ jobs:
             echo bootstrap=true >> "$GITHUB_OUTPUT"
             echo "agents.lock.json is BOOTSTRAP: nothing on .github main to sync from yet."
           fi
+      - name: Pick the token
+        id: token
+        env:
+          HAS_SYNC_TOKEN: ${{ secrets.SYNC_TOKEN != '' }}
+        run: |
+          if [ "$HAS_SYNC_TOKEN" = true ]; then
+            echo workflow=1 >> "$GITHUB_OUTPUT"
+            echo "Using SYNC_TOKEN: the PR runs CI and may update .github/workflows/agents.yml."
+          else
+            echo "::warning::SYNC_TOKEN secret is not set. Falling back to GITHUB_TOKEN: the PR leaves .github/workflows/agents.yml out and runs no CI until closed and reopened."
+          fi
       - name: Sync from .github main
         if: steps.pin.outputs.bootstrap != 'true'
+        env:
+          AGENTS_SYNC_WORKFLOW: ${{ steps.token.outputs.workflow }}
         run: |
           bash scripts/sync-agents.sh --latest
           # .github main also moves for templates and workflows. A new sha with no file changes
-          # would open a PR every day, so the old pin is kept until agents/ really changes.
+          # would rewrite the PR on every run, so the old pin is kept until agents/ really changes.
           if [ -z "$(git status --porcelain -- . ':!agents.lock.json')" ]; then
             git checkout -- agents.lock.json
             echo "No agent file changed; keeping the current pin."
           fi
-      # A PR opened with GITHUB_TOKEN does not trigger pull_request workflows, so the check job
-      # never runs on it. Checking here is what keeps a broken sync out of the PR.
+      # The PR's own CI runs the same check, but only with SYNC_TOKEN. Checking here keeps a
+      # broken sync out of the PR either way.
       - name: Check the result
         if: steps.pin.outputs.bootstrap != 'true'
         run: bash scripts/sync-agents.sh --check
-      # Needs the org (and repo) setting "Allow GitHub Actions to create and approve pull
-      # requests". With no changes against main the action opens nothing; an open PR on the
-      # branch is updated in place. It pushes only to chore/sync-agents, never to main.
+      # With no changes against main the action opens nothing and deletes the branch, which closes
+      # a stale PR; an open PR on the branch is updated in place. It pushes only to
+      # chore/sync-agents, never to main. The GITHUB_TOKEN fallback also needs the org and repo
+      # setting "Allow GitHub Actions to create and approve pull requests".
       - name: Open or update the sync PR
         if: steps.pin.outputs.bootstrap != 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
           branch: chore/sync-agents
           base: main
           delete-branch: true
           commit-message: |
             agents: sync shared rules and skills from capstone-hpsi-2/.github
 
-            Generated by the daily agents workflow (scripts/sync-agents.sh --latest).
+            Generated by the agents workflow (scripts/sync-agents.sh --latest).
           title: "agents: sync shared rules and skills from .github"
           body: |
-            Generated by the daily `agents` workflow: `scripts/sync-agents.sh --latest`, then `--check` passed in the same run.
+            Generated by the `agents` workflow: `scripts/sync-agents.sh --latest`, then `--check` passed in the same run.
 
-            Review the diff like any PR; the source change was already reviewed in `capstone-hpsi-2/.github`. GitHub does not run CI on PRs opened by `GITHUB_TOKEN`: close and reopen this PR to run it before merging.
+            Review the diff like any PR; the source change was already reviewed in `capstone-hpsi-2/.github`. If `github-actions[bot]` opened this PR, the repo has no `SYNC_TOKEN` secret and CI did not run: close and reopen it before merging.
 
-            Do not push to this branch: the next run overwrites it.
+            Do not push to this branch: the next run rebuilds it from `main`.
