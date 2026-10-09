@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(/.claude/skills/**)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.agents/hooks.json)",
+      "Edit(/scripts/agents-guard.sh)",
+      "Edit(/scripts/sync-agents.sh)",
+      "Edit(/agents.lock.json)",
+      "Edit(/.github/workflows/agents.yml)",
+      "Edit(CLAUDE.md)",
+      "Edit(GEMINI.md)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/scripts/agents-guard.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

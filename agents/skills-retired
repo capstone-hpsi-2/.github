@@ -1,0 +1,4 @@
+# Shared skills that were renamed or removed; scripts/sync-agents.sh deletes these folders from
+# every repo, and --check fails while one exists. A name stays listed after the change, because a
+# repo whose agents.lock.json was rewritten first no longer remembers the old name.
+feature-branch

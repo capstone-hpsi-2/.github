@@ -1,0 +1,34 @@
+# Every repo syncs agents/ from this repo's main, so a broken guard or skill here breaks agents
+# everywhere after the next daily sync. This is the gate before merge.
+name: agents
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shared config files are valid JSON
+        run: |
+          python3 -m json.tool agents/claude/settings.json >/dev/null
+          python3 -m json.tool agents/antigravity/hooks.json >/dev/null
+      - name: Skills have frontmatter matching their folder
+        run: bash agents/tests/skills-frontmatter.sh
+      # The guard must understand C:\ paths from Windows machines. Creating the test repo under
+      # /c/ lets those paths map onto a real folder on Linux.
+      - name: Guard tests (python and node readers)
+        run: |
+          sudo mkdir -p /c/guard-tests
+          sudo chown "$(id -u):$(id -g)" /c/guard-tests
+          AGENTS_GUARD_TEST_DIR=/c/guard-tests bash agents/tests/agents-guard.test.sh
+      # Every repo's daily sync runs agents/scripts/sync-agents.sh from main, so a source change
+      # that breaks it (a missing synced file, a bad skill folder) must fail here first.
+      - name: Sync tests (sample consumer repo)
+        run: bash agents/tests/sync-agents.test.sh

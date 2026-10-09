@@ -4,9 +4,10 @@ Applies to every repo in the org: `frontend`, `admin-backend`, `transcription-ba
 
 ## Branches & PRs
 
-- Branch from `main`: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`.
-- Small PRs. Squash-merge. The PR title becomes the commit message (Conventional Commits:
-  `feat(scheduling): detect booking overlaps`).
+- Branch names, the PR flow and PR titles: the Guardrails in
+  [agents/AGENTS.shared.md](agents/AGENTS.shared.md) and the skill
+  [create-pr](agents/skills/create-pr/SKILL.md).
+- Small PRs. Squash-merge. The PR title becomes the commit message.
 - CI must be green. `CODEOWNERS` decides reviewers; in `frontend`, each team reviews its own
   `src/features/*`, and both teams review `nginx/` and `contracts/`.
 
