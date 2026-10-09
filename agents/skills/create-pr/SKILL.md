@@ -21,7 +21,7 @@ b=$(git branch --show-current); [[ -z $b || $b == main || $b == chore/sync-agent
 
 ## Start
 1. Ask which member is working (list in `AGENTS.md` guardrail 2) and the feature name.
-2. Tree must be clean: `git status --porcelain` prints nothing, else commit or stash.
+2. Tree must be clean: `git status --porcelain` prints nothing. Else, on `main`: do step 4 now (`git checkout -b` carries the uncommitted changes onto the new branch), commit them there and skip step 3; Finish rebases on `origin/main`. Elsewhere: commit or stash.
 3. Update main: `git fetch origin --prune && git checkout main && git pull --ff-only origin main`. If `--ff-only` fails, someone committed on local `main`: stop and tell the user.
 4. Create the branch and check its name:
    ```bash
@@ -32,12 +32,12 @@ b=$(git branch --show-current); [[ -z $b || $b == main || $b == chore/sync-agent
 ## Continue
 1. `git fetch origin --prune && git checkout <branch>` (only on the remote: `git checkout --track origin/<branch>`).
 2. Stash local changes if any, then `git rebase origin/main`.
-3. On conflict: keep both intents. Never hand-merge generated files; regenerate them (`python -m app.export_openapi`, `./scripts/sync-contracts.sh`, `./scripts/sync-agents.sh`). Then `git add <file> && git rebase --continue`. If you do not understand the other side, `git rebase --abort` and ask its author (`git log origin/main -- <file>`).
+3. On conflict: keep both intents. Never hand-merge generated files; regenerate them: `python -m app.export_openapi`, `./scripts/sync-contracts.sh`, and for agent files `git checkout --ours agents.lock.json` first (in a rebase, `--ours` is main's pin), then `bash scripts/sync-agents.sh`. Then `git add <file> && git rebase --continue`. If you do not understand the other side, `git rebase --abort` and ask its author (`git log origin/main -- <file>`).
 4. Run the gate before writing new code so you know the base is green.
 
 ## Finish (before every PR, in order)
 1. Rebase again: `git fetch origin --prune && git rebase origin/main`. A gate run before this does not count.
-2. Run the repo gate from the "Gates" table in `AGENTS.md`, plus `bash scripts/sync-agents.sh --check`. Keep the output. Red gate: fix, commit, rerun.
+2. Run the repo gate and the `all` row from the "Gates" table in `AGENTS.md`. Keep the output. Red gate: fix, commit, rerun.
 3. Adversarial self-review. Spawn 4 subagents in parallel, fresh context each, one lens each, none seeing the others' output:
 
    | Lens | Looks for |
@@ -61,13 +61,4 @@ b=$(git branch --show-current); [[ -z $b || $b == main || $b == chore/sync-agent
    ```bash
    gh pr create --base main --head "$b" --title "worker: claim jobs with long-poll" --body-file .git/PR_BODY.md
    ```
-   Title `<area>: <imperative>`, under 70 characters. Body sections:
-   ```markdown
-   ## What and why
-   ## Gate (after rebase on origin/main <short sha>)
-   ## Adversarial self-review
-   | Lens | Findings | Outcome |
-   ## Contract impact
-   ## Repo-specific checks (see the repo AGENTS.md)
-   ```
-   Every section filled; "n/a" needs a reason. Return the PR URL and remind the user another member must review before merge.
+   Title `<area>: <imperative>`, under 70 characters. Body: every section of the PR template (the repo's `.github/PULL_REQUEST_TEMPLATE.md`, else the org default in `capstone-hpsi-2/.github`), plus three it does not have: `## Gate (after rebase on origin/main <short sha>)`, `## Adversarial self-review` with a `| Lens | Findings | Outcome |` table, and `## Repo-specific checks` (from the repo `AGENTS.md`). Every section filled; "n/a" needs a reason. Return the PR URL and remind the user another member must review before merge.

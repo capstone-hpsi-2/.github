@@ -28,3 +28,7 @@ jobs:
           sudo mkdir -p /c/guard-tests
           sudo chown "$(id -u):$(id -g)" /c/guard-tests
           AGENTS_GUARD_TEST_DIR=/c/guard-tests bash agents/tests/agents-guard.test.sh
+      # Every repo's daily sync runs agents/scripts/sync-agents.sh from main, so a source change
+      # that breaks it (a missing synced file, a bad skill folder) must fail here first.
+      - name: Sync tests (sample consumer repo)
+        run: bash agents/tests/sync-agents.test.sh

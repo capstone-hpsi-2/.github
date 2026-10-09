@@ -18,14 +18,14 @@ description: Decide where a new rule, convention, fact or lesson belongs in the 
 |---|---|---|
 | 1 | Can it be read from the code, config or CI file (`pyproject.toml`, `ci.yml`)? | Nowhere. A copy drifts. |
 | 2 | Is it a fact about the system for people (design, data, models, results)? | Its human doc, per the doc map. |
-| 3 | Is it a procedure of more than ~5 lines, or needed for only one kind of task? | A skill in `.agents/skills/<name>/SKILL.md`: shared (in `.github`) if 2+ repos use it, else repo-local. Add one index line. |
+| 3 | Is it a procedure of more than ~5 lines, or needed for only one kind of task? | A skill in `.agents/skills/<name>/SKILL.md`: shared (in `.github`, plus a row in its Skills table) if 2+ repos use it, else repo-local (where to list it: "Skills" in `AGENTS.md`). |
 | 4 | Does it apply to 2+ repos? | The shared block: PR to `.github` `agents/AGENTS.shared.md`. |
 | 5 | Otherwise | That repo's `## <repo> specifics`, below `<!-- END SHARED -->`. |
 
 Write rules as one imperative line, with the reason when it is not obvious.
 
 ## Changing a shared rule or skill
-1. PR to `capstone-hpsi-2/.github` (skill `create-pr`), editing `agents/AGENTS.shared.md`, `agents/skills/<name>/`, or the guard files in `agents/` (layout: `agents/README.md`). A new shared skill also needs a row in the Skills table.
+1. PR to `capstone-hpsi-2/.github` (skill `create-pr`), editing `agents/AGENTS.shared.md`, `agents/skills/<name>/`, or another synced file in `agents/` (layout: `agents/README.md`). A new shared skill also needs a row in the Skills table; a renamed or removed one goes in `agents/skills-retired`.
 2. After merge, each repo's daily `agents` workflow opens or updates one PR on `chore/sync-agents`. Review and merge it. To adopt sooner, run the workflow by hand (Actions, `agents`, Run workflow), or on a `feat/` branch:
    ```bash
    bash scripts/sync-agents.sh --latest --check   # preview, writes nothing

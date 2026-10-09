@@ -5,6 +5,9 @@
       "Edit(/.claude/settings.json)",
       "Edit(/.agents/hooks.json)",
       "Edit(/scripts/agents-guard.sh)",
+      "Edit(/scripts/sync-agents.sh)",
+      "Edit(/agents.lock.json)",
+      "Edit(/.github/workflows/agents.yml)",
       "Edit(CLAUDE.md)",
       "Edit(GEMINI.md)"
     ]

@@ -11,32 +11,38 @@
 # valid JSON. Antigravity: a refusal prints {"decision":"deny","reason":...}. An allowed edit prints
 # nothing for either, so the host's own permission prompts still apply ("allow" would skip them).
 #
+# The repo is found from the edited file, not from this script's location: the nearest folder
+# above it holding agents.lock.json. A session can edit another checkout, a Claude worktree under
+# .claude/worktrees/, or a workspace opened through a junction or symlink, and each of those has
+# its own AGENTS.md and lock. So any copy of this script guards any repo, which is what lets a
+# user-level hook cover sessions started above the repos (agents/README.md in .github).
+#
 # Claude Code runs this in shell form through Git Bash. In exec form "bash" is looked up on the
 # Windows PATH, where C:\Windows\System32\bash.exe (WSL) comes before Git's bash.
 # Antigravity CLI (seen on 1.3.1, Windows) splits the hook command on spaces with no shell, runs
 # it from the .agents/ folder, and blocks the edit when the command fails, so a "bash ..." command
 # reached WSL bash or nothing. It runs this through a git alias instead: git is on every machine,
 # runs "!" aliases with its own sh from the repo top level, and the command has no quoting. That
-# needs the shebang and, outside Windows, the executable bit (sync-agents.sh sets it).
+# needs the shebang and, outside Windows, the executable bit (sync-agents.sh sets it, --check
+# verifies it).
 #
 # It runs before every agent file edit, and Git Bash pays roughly 100 ms per subprocess, so the
 # only subprocess is the JSON reader; everything else is bash builtins (bash 4 or newer).
 #
 # AGENTS_GUARD_JSON=python|node|none forces the JSON reader; the tests use it to cover both.
+# AGENTS_GUARD_SCOPE=user marks the user-level hook, which steps aside when the session's own
+# project hook already runs, so an edit is not checked twice.
 set -uo pipefail
 # bash 5.2 turns "&" in a ${s/old/new} replacement into the matched text; edits must stay literal.
 shopt -u patsub_replacement 2>/dev/null || true
 
 caller_dir=$PWD
-self=${BASH_SOURCE[0]//\\//}
-[[ $self == */* ]] || self=./$self
-cd "${self%/*}/.." 2>/dev/null || exit 0
-root=$PWD
 IFS= read -r -d '' input || true
 
 # Bash cannot parse JSON and Git Bash has no jq. Backends have python, the frontend has node, so
 # both readers exist and do the same thing: flatten the payload into NUL-separated
-# "dotted.key" / value pairs.
+# "dotted.key" / value pairs. A NUL inside a value would shift every later key onto the wrong
+# value and hide text from the checks, so it becomes U+FFFD.
 PY='import json,sys
 o=[]
 def w(p,v):
@@ -46,9 +52,9 @@ def w(p,v):
         for i,x in enumerate(v): w(p+[str(i)],x)
     else: o.extend([".".join(p),v if isinstance(v,str) else json.dumps(v)])
 w([],json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}"))
-sys.stdout.buffer.write("".join(x+"\0" for x in o).encode("utf-8"))'
+sys.stdout.buffer.write("".join(x.replace("\0","\ufffd")+"\0" for x in o).encode("utf-8"))'
 JS='const o=[];const w=(p,v)=>{if(v!==null&&typeof v==="object"){for(const k of Object.keys(v))w(p.concat(k),v[k])}else o.push(p.join("."),typeof v==="string"?v:JSON.stringify(v))};
-let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",c=>s+=c).on("end",()=>{w([],JSON.parse(s||"{}"));process.stdout.write(o.map(x=>x+"\0").join(""))})'
+let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",c=>s+=c).on("end",()=>{w([],JSON.parse(s||"{}"));process.stdout.write(o.map(x=>x.replace(/\0/g,"\ufffd")+"\0").join(""))})'
 
 flatten() {
   local want=${AGENTS_GUARD_JSON:-auto} py
@@ -85,12 +91,12 @@ get() {
 }
 
 if has tool_name; then
-  host=claude args=tool_input
+  host=claude args=tool_input proj=${CLAUDE_PROJECT_DIR:-} hookfile=.claude/settings.json
   get cwd; base=$REPLY
   get tool_input.file_path || get tool_input.notebook_path; file=$REPLY
 elif has toolCall.name; then
-  host=antigravity args=toolCall.args
-  get workspacePaths.0; base=$REPLY
+  host=antigravity args=toolCall.args hookfile=.agents/hooks.json
+  get workspacePaths.0; base=$REPLY proj=$REPLY
   get toolCall.args.TargetFile; file=$REPLY
 else
   exit 0
@@ -108,17 +114,19 @@ deny() {
   exit 0
 }
 
-# Payloads carry C:\x, C:/x, /c/x (Git Bash), /mnt/c/x (WSL) or relative paths, and Windows
-# compares names without case. Everything becomes /c/x; comparisons lower-case both sides.
+# Turns a payload path into one this shell can open. Payloads carry C:\x, C:/x, /c/x (Git Bash),
+# /mnt/c/x (WSL) or relative paths. Windows also opens a file through \\?\C:\x and through a
+# stream name (AGENTS.md::$DATA is AGENTS.md), so both are reduced to the plain name.
+# "." and ".." are resolved by name first, because a missing folder cannot be resolved on disk.
 norm() {
   local p=${1//\\//} part out=() parts
+  [[ $p == //[?.]/* ]] && p=${p:4}
   if [[ $p =~ ^([A-Za-z]):(/.*)?$ ]]; then
     p="/${BASH_REMATCH[1],,}${BASH_REMATCH[2]}"
-  elif [[ $p =~ ^/mnt/([a-z])(/.*)?$ ]]; then
-    p="/${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
   fi
   IFS=/ read -r -a parts <<<"$p"
   for part in "${parts[@]}"; do
+    part=${part%%:*}
     case $part in
       '' | .) ;;
       ..) ((${#out[@]})) && unset "out[$((${#out[@]} - 1))]" ;;
@@ -130,23 +138,35 @@ norm() {
 
 file=${file//\\//}
 [[ $file == /* || $file =~ ^[A-Za-z]: ]] || file="${base:-$caller_dir}/$file"
-norm "$file"; nfile=$REPLY
-norm "$root"; nroot=$REPLY
-if [[ ${nfile,,} != "${nroot,,}"/* && $OSTYPE == @(msys|cygwin) ]]; then
-  # Git Bash mounts some folders elsewhere (/tmp is %TEMP%), so $PWD can differ from the C:\ form
-  # in the payload. pwd -W prints the C:/ form.
-  norm "$(pwd -W)"; nroot=$REPLY
-fi
-[[ ${nfile,,} == "${nroot,,}"/* ]] || exit 0
-rel=${nfile:${#nroot}+1}
+norm "$file"
+# The deepest folder that exists is resolved on disk (cd -P), so a junction or symlink becomes
+# the real path; the part that does not exist yet (a new file or folder) is appended by name.
+dir=${REPLY%/*} tail=${REPLY##*/}
+while [[ -n $dir && ! -d $dir ]]; do tail=${dir##*/}/$tail dir=${dir%/*}; done
+cd -P "${dir:-/}" 2>/dev/null || exit 0
+dir=${PWD%/}
+path=$dir/$tail
+# A .git without a lock is a repo that does not use the shared agent files: nothing to guard.
+while [[ ! -f $dir/agents.lock.json ]]; do
+  [[ -e $dir/.git || -z $dir ]] && exit 0
+  dir=${dir%/*}
+done
+root=$dir
+rel=${path#"$root"/}
 r=${rel,,}
+
+if [[ ${AGENTS_GUARD_SCOPE:-} == user && -n $proj ]]; then
+  norm "$proj"
+  [[ -f $REPLY/$hookfile && -f $REPLY/scripts/agents-guard.sh ]] && exit 0
+fi
 
 SRC='capstone-hpsi-2/.github'
 UNSURE='Unsure where it goes: load skill agents-md-placement.'
+RULES_HOME="Put the rule in AGENTS.md: shared rules by PR to $SRC agents/AGENTS.shared.md, repo rules in the '## ... specifics' section of this repo's AGENTS.md. $UNSURE"
 
 shared=" "
 lock=
-IFS= read -r -d '' lock <agents.lock.json 2>/dev/null
+IFS= read -r -d '' lock <"$root/agents.lock.json" 2>/dev/null
 re='"skills"[[:space:]]*:[[:space:]]*\[([^]]*)\]'
 if [[ $lock =~ $re ]]; then
   list=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/ }
@@ -155,24 +175,36 @@ fi
 
 case $r in
   .claude/skills/*)
-    name=${rel#*/*/} name=${name%%/*}
-    deny ".claude/skills/ is a generated copy of .agents/skills/ (Claude Code reads skills only from .claude/skills). Edit .agents/skills/$name/ instead, or for a shared skill open a PR to $SRC editing agents/skills/$name/. Then run: bash scripts/sync-agents.sh, which rebuilds the copy. $UNSURE"
+    name=${r#.claude/skills/} name=${name%%/*}
+    if [[ $shared == *" $name "* ]]; then
+      deny ".claude/skills/$name/ is a generated copy of the shared skill $name (Claude Code reads skills only from .claude/skills). Change the skill with a PR to $SRC editing agents/skills/$name/SKILL.md; the daily chore/sync-agents PR brings it to this repo. For a procedure only this repo needs, create a repo-local skill under a new name in .agents/skills/<new-name>/SKILL.md, then run: bash scripts/sync-agents.sh. $UNSURE"
+    fi
+    deny ".claude/skills/ is a generated copy of .agents/skills/ (Claude Code reads skills only from .claude/skills). Edit .agents/skills/$name/ instead, then run: bash scripts/sync-agents.sh, which rebuilds the copy. $UNSURE"
     ;;
-  .claude/settings.json | .agents/hooks.json | scripts/agents-guard.sh)
-    deny "$rel is synced from $SRC agents/ by scripts/sync-agents.sh and is the same in every repo. Change it with a PR to $SRC (agents/claude/settings.json, agents/antigravity/hooks.json or agents/scripts/agents-guard.sh). Personal Claude Code settings go in .claude/settings.local.json, which is not committed."
+  .claude/settings.json | .agents/hooks.json | scripts/agents-guard.sh | scripts/sync-agents.sh)
+    deny "$rel is synced from $SRC agents/ by scripts/sync-agents.sh and is the same in every repo. Change it with a PR to $SRC (layout in agents/README.md there). Personal Claude Code settings go in .claude/settings.local.json, which is not committed."
+    ;;
+  agents.lock.json)
+    deny "agents.lock.json is written by scripts/sync-agents.sh: its skills list decides which skills this guard treats as shared. To adopt newer shared files run: bash scripts/sync-agents.sh --latest. In a rebase conflict, take main's pin with: git checkout --ours agents.lock.json, then run: bash scripts/sync-agents.sh."
+    ;;
+  .github/workflows/agents.yml)
+    deny ".github/workflows/agents.yml is the same in every repo; its source is $SRC agents/workflows/agents.yml. Change it with a PR there, then run bash scripts/sync-agents.sh on your machine, which copies it (the CI sync job cannot push workflow files)."
     ;;
   claude.md | */claude.md)
-    deny "CLAUDE.md contains only the line @AGENTS.md (shared guardrail 8), so Claude Code and Antigravity read the same rules. Put the rule in AGENTS.md: shared rules by PR to $SRC agents/AGENTS.shared.md, repo rules in the '## ... specifics' section. $UNSURE"
+    deny "CLAUDE.md contains only the line @AGENTS.md (shared guardrail 8), so Claude Code and Antigravity read the same rules. $RULES_HOME"
     ;;
   gemini.md | */gemini.md)
-    deny "There is no GEMINI.md: Antigravity reads AGENTS.md (shared guardrail 8). Put the rule in AGENTS.md: shared rules by PR to $SRC agents/AGENTS.shared.md, repo rules in the '## ... specifics' section. $UNSURE"
+    deny "There is no GEMINI.md: Antigravity reads AGENTS.md (shared guardrail 8). $RULES_HOME"
     ;;
   .agents/skills/*/*)
     name=${r#.agents/skills/} name=${name%%/*}
     if [[ $shared == *" $name "* ]]; then
-      deny ".agents/skills/$name/ is a shared skill (listed in agents.lock.json), copied from $SRC agents/skills/$name/; local edits are overwritten by the next sync. Change it with a PR to $SRC. For a procedure only this repo needs, create a repo-local skill under a new name in .agents/skills/<new-name>/SKILL.md. $UNSURE"
+      deny ".agents/skills/$name/ is a shared skill, copied from $SRC agents/skills/$name/; local edits are overwritten by the next sync. Change it with a PR to $SRC. For a procedure only this repo needs, create a repo-local skill under a new name in .agents/skills/<new-name>/SKILL.md. $UNSURE"
     fi
     exit 0
+    ;;
+  .claude/rules/* | .agents/rules/* | .agent/rules/* | */agents.md | claude.local.md | */claude.local.md)
+    deny "$rel would be a second home for agent rules that only one of Claude Code and Antigravity reads (shared guardrail 8). $RULES_HOME Personal notes go in your user-level ~/.claude/CLAUDE.md, outside the repo."
     ;;
   agents.md) ;;
   *) exit 0 ;;
@@ -216,14 +248,18 @@ replace_in_range() { # text old new all start end
 }
 
 old=
-IFS= read -r -d '' old <AGENTS.md 2>/dev/null
+IFS= read -r -d '' old <"$root/AGENTS.md" 2>/dev/null
 # A CRLF checkout must compare equal to the LF text in payloads.
 old=${old//$'\r'/}
 signature "$old"; before=$REPLY
 spec=
 re=$'(^|\n)## ([^\n]* specifics)[[:space:]]*(\n|$)'
 [[ $old =~ $re ]] && spec=${BASH_REMATCH[2]}
-BLOCK_MSG="This edit changes the shared block of AGENTS.md (from the <!-- BEGIN SHARED line to <!-- END SHARED -->). scripts/sync-agents.sh copies that block from $SRC agents/AGENTS.shared.md and overwrites local changes. Put the change here instead: a rule for every repo goes in a PR to $SRC editing agents/AGENTS.shared.md; a rule for this repo only goes in the '## ${spec:-<repo> specifics}' section below <!-- END SHARED -->; a multi-step procedure goes in a repo-local skill, .agents/skills/<new-name>/SKILL.md. $UNSURE"
+BLOCK_MSG="This edit changes the shared block of AGENTS.md (from the <!-- BEGIN SHARED line to <!-- END SHARED -->). scripts/sync-agents.sh copies that block from $SRC agents/AGENTS.shared.md and overwrites local changes. Put the change here instead: a rule for every repo goes in a PR to $SRC editing agents/AGENTS.shared.md; a rule for this repo only goes in the '## ${spec:-<repo> specifics}' section below <!-- END SHARED -->; a multi-step procedure goes in a repo-local skill, .agents/skills/<new-name>/SKILL.md. To restore the block, or to resolve a merge conflict inside it, run: bash scripts/sync-agents.sh. $UNSURE"
+# Claude Code's Edit also matches text that differs from the file (curly for straight quotes, at
+# least), so a string this hook cannot find could still land in the block. Unknown text is
+# refused; the agent's retry with the exact text costs one turn.
+NOMATCH_MSG="The text to replace is not in AGENTS.md exactly as written (quotes, spaces and line breaks must match), so this hook cannot tell whether the edit touches the shared block. Read AGENTS.md and copy the text exactly."
 
 check() { signature "$1"; [[ $REPLY == "$before" ]] || deny "$BLOCK_MSG"; }
 edit() { # key prefix holding old/new/all fields; applies to $after
@@ -231,6 +267,7 @@ edit() { # key prefix holding old/new/all fields; applies to $after
   get "$1.$2"; o=$REPLY
   get "$1.$3"; n=$REPLY
   get "$1.$4"; a=$REPLY
+  [[ -z $o || $after == *"$o"* ]] || deny "$NOMATCH_MSG"
   replace "$after" "$o" "$n" "$a"; after=$REPLY
 }
 
@@ -264,6 +301,7 @@ chunk() {
   get "$1.AllowMultiple"; a=$REPLY
   get "$1.StartLine"; s=$REPLY
   get "$1.EndLine"; e=$REPLY
+  [[ -z $t || $old == *"$t"* ]] || deny "$NOMATCH_MSG"
   replace_in_range "$old" "$t" "$c" "$a" "$s" "$e"
   check "$REPLY"
 }
