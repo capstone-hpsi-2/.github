@@ -212,7 +212,13 @@ run_cases() {
     expect deny "win backslash path, block edit" "$(c_edit "$winroot\\AGENTS.md" 'Rule one says alpha.' 'q')"
     expect allow "win backslash path, specifics edit" "$(c_edit "$winroot\\AGENTS.md" 'Local rule says beta.' 'q')"
     expect deny "win forward-slash path, .claude/skills" "$(c_write "$winroot_fwd/.claude/skills/x/SKILL.md" 'x')"
-    expect deny "win lower-case drive and dirs, CLAUDE.md" "$(c_write "$lowroot/CLAUDE.md" 'x')"
+    # The guard resolves the path on disk, so a lower-cased path only names the repo on a
+    # case-insensitive filesystem (Windows). On the Linux runner it is a different, missing dir.
+    if [[ -d $(printf '%s' "$repo" | tr '[:upper:]' '[:lower:]') ]]; then
+      expect deny "win lower-case drive and dirs, CLAUDE.md" "$(c_write "$lowroot/CLAUDE.md" 'x')"
+    else
+      skip=$((skip + 1))
+    fi
     expect deny "win upper-case file name AGENTS.MD" "$(c_edit "$winroot\\AGENTS.MD" 'Rule one says alpha.' 'q')"
     expect deny "win stream name AGENTS.md::\$DATA" "$(c_write "$winroot\\AGENTS.md::\$DATA" 'x')"
     expect deny "win \\\\?\\ prefix, CLAUDE.md" "$(c_write "\\\\?\\$winroot\\CLAUDE.md" 'x')"
