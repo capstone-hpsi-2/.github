@@ -1,5 +1,5 @@
 # Every repo syncs agents/ from this repo's main, so a broken guard or skill here breaks agents
-# everywhere after the next daily sync. This is the gate before merge.
+# everywhere after the next sync. This is the gate before merge.
 name: agents
 
 on:
@@ -28,7 +28,7 @@ jobs:
           sudo mkdir -p /c/guard-tests
           sudo chown "$(id -u):$(id -g)" /c/guard-tests
           AGENTS_GUARD_TEST_DIR=/c/guard-tests bash agents/tests/agents-guard.test.sh
-      # Every repo's daily sync runs agents/scripts/sync-agents.sh from main, so a source change
+      # Every repo's sync job runs agents/scripts/sync-agents.sh from main, so a source change
       # that breaks it (a missing synced file, a bad skill folder) must fail here first.
       - name: Sync tests (sample consumer repo)
         run: bash agents/tests/sync-agents.test.sh

@@ -177,7 +177,7 @@ case $r in
   .claude/skills/*)
     name=${r#.claude/skills/} name=${name%%/*}
     if [[ $shared == *" $name "* ]]; then
-      deny ".claude/skills/$name/ is a generated copy of the shared skill $name (Claude Code reads skills only from .claude/skills). Change the skill with a PR to $SRC editing agents/skills/$name/SKILL.md; the daily chore/sync-agents PR brings it to this repo. For a procedure only this repo needs, create a repo-local skill under a new name in .agents/skills/<new-name>/SKILL.md, then run: bash scripts/sync-agents.sh. $UNSURE"
+      deny ".claude/skills/$name/ is a generated copy of the shared skill $name (Claude Code reads skills only from .claude/skills). Change the skill with a PR to $SRC editing agents/skills/$name/SKILL.md; the chore/sync-agents PR brings it to this repo. For a procedure only this repo needs, create a repo-local skill under a new name in .agents/skills/<new-name>/SKILL.md, then run: bash scripts/sync-agents.sh. $UNSURE"
     fi
     deny ".claude/skills/ is a generated copy of .agents/skills/ (Claude Code reads skills only from .claude/skills). Edit .agents/skills/$name/ instead, then run: bash scripts/sync-agents.sh, which rebuilds the copy. $UNSURE"
     ;;
@@ -188,7 +188,7 @@ case $r in
     deny "agents.lock.json is written by scripts/sync-agents.sh: its skills list decides which skills this guard treats as shared. To adopt newer shared files run: bash scripts/sync-agents.sh --latest. In a rebase conflict, take main's pin with: git checkout --ours agents.lock.json, then run: bash scripts/sync-agents.sh."
     ;;
   .github/workflows/agents.yml)
-    deny ".github/workflows/agents.yml is the same in every repo; its source is $SRC agents/workflows/agents.yml. Change it with a PR there, then run bash scripts/sync-agents.sh on your machine, which copies it (the CI sync job cannot push workflow files)."
+    deny ".github/workflows/agents.yml is the same in every repo; its source is $SRC agents/workflows/agents.yml. Change it with a PR there; the chore/sync-agents PR brings it here (with the SYNC_TOKEN secret; without it, run bash scripts/sync-agents.sh on your machine)."
     ;;
   claude.md | */claude.md)
     deny "CLAUDE.md contains only the line @AGENTS.md (shared guardrail 8), so Claude Code and Antigravity read the same rules. $RULES_HOME"

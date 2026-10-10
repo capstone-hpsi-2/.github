@@ -26,7 +26,7 @@ Write rules as one imperative line, with the reason when it is not obvious.
 
 ## Changing a shared rule or skill
 1. PR to `capstone-hpsi-2/.github` (skill `create-pr`), editing `agents/AGENTS.shared.md`, `agents/skills/<name>/`, or another synced file in `agents/` (layout: `agents/README.md`). A new shared skill also needs a row in the Skills table; a renamed or removed one goes in `agents/skills-retired`.
-2. After merge, each repo's daily `agents` workflow opens or updates one PR on `chore/sync-agents`. Review and merge it. To adopt sooner, run the workflow by hand (Actions, `agents`, Run workflow), or on a `feat/` branch:
+2. After merge, each repo's `agents` workflow opens or updates one PR on `chore/sync-agents` within minutes. Review and merge it. If none appears, run the workflow by hand (Actions, `agents`, Run workflow), or on a `feat/` branch:
    ```bash
    bash scripts/sync-agents.sh --latest --check   # preview, writes nothing
    bash scripts/sync-agents.sh --latest           # pin, then rewrite every generated file

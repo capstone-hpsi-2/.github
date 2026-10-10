@@ -1,0 +1,166 @@
+# Reusable frontend contract check for the backends. Each backend calls it from its CI on
+# pull_request and on push to main:
+#
+#   jobs:
+#     contract-frontend:
+#       uses: capstone-hpsi-2/.github/.github/workflows/contract-frontend.yml@main
+#       with:
+#         service: admin-backend
+#       secrets: inherit
+#
+# pull_request: typechecks frontend main against this PR's openapi/ specs. Red means merging
+#   breaks the frontend: coordinate a frontend PR. Informative, not a required check.
+# push to main: sends the contracts-changed repository_dispatch to the frontend, whose sync opens
+#   or updates its chore/sync-contracts PR. The event name is that workflow's trigger.
+# Either way it does nothing when no file under openapi/ changed.
+#
+# Needs the SYNC_TOKEN secret: the frontend is private, and GITHUB_TOKEN can neither read it nor
+# dispatch to it. Without the secret the PR check is skipped with a warning and the dispatch fails.
+name: contract-frontend
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: The calling backend, admin-backend or transcription-backend
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-typecheck:
+    if: github.event_name == 'pull_request'
+    name: frontend typecheck (${{ inputs.service }} PR specs)
+    runs-on: ubuntu-latest
+    env:
+      SERVICE: ${{ inputs.service }}
+    steps:
+      # sync-contracts.sh --local reads ../<repo name>/<path>, so the backend must sit at
+      # <service>/ next to frontend/.
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ inputs.service }}
+          fetch-depth: 0
+      - name: Did openapi/ change?
+        id: changed
+        working-directory: ${{ inputs.service }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HAS_SYNC_TOKEN: ${{ secrets.SYNC_TOKEN != '' }}
+        run: |
+          case "$SERVICE" in
+            admin-backend|transcription-backend) ;;
+            *) echo "::error::service must be admin-backend or transcription-backend, got '$SERVICE'"; exit 1 ;;
+          esac
+          if [ "$SERVICE" != "${GITHUB_REPOSITORY#*/}" ]; then
+            echo "::error::service '$SERVICE' does not match the calling repo $GITHUB_REPOSITORY"; exit 1
+          fi
+          files=$(git diff --name-only "$BASE" HEAD -- openapi/)
+          if [ -z "$files" ]; then
+            echo "No file under openapi/ changed; nothing to check against the frontend."
+            exit 0
+          fi
+          printf 'Changed specs:\n%s\n' "$files"
+          # Dependabot and fork PRs get no repo secrets.
+          if [ "$HAS_SYNC_TOKEN" != true ]; then
+            echo "::warning::SYNC_TOKEN secret is not available to this run, so the private frontend cannot be checked out. Skipping the frontend typecheck."
+            exit 0
+          fi
+          echo run=true >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          repository: ${{ github.repository_owner }}/frontend
+          ref: main
+          path: frontend
+          token: ${{ secrets.SYNC_TOKEN }}
+      - uses: actions/setup-node@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        if: steps.changed.outputs.run == 'true'
+        working-directory: frontend
+      # --local copies every contracts.lock.json entry from a sibling. The other backend's entries
+      # come from frontend main's vendored copies, not that backend's main, so a red result can
+      # only come from this PR.
+      - name: Stand in for the other backend
+        if: steps.changed.outputs.run == 'true'
+        working-directory: frontend
+        run: |
+          node -e '
+            const fs = require("fs"), path = require("path");
+            for (const c of require("./contracts.lock.json").contracts) {
+              const name = c.repo.split("/")[1];
+              if (name === process.env.SERVICE) continue;
+              const dest = path.join("..", name, c.path);
+              fs.mkdirSync(path.dirname(dest), { recursive: true });
+              fs.copyFileSync(c.out, dest);
+              console.log(`${c.name}: frontend main ${c.out} -> ${dest}`);
+            }
+          '
+      - name: Regenerate types from the PR specs
+        id: regen
+        if: steps.changed.outputs.run == 'true'
+        working-directory: frontend
+        run: |
+          ./scripts/sync-contracts.sh --local
+          git --no-pager diff --stat -- contracts src/api/generated
+      - name: Frontend typecheck
+        id: typecheck
+        if: steps.changed.outputs.run == 'true'
+        working-directory: frontend
+        run: npm run typecheck
+      - name: What red means
+        if: failure() && (steps.regen.outcome == 'failure' || steps.typecheck.outcome == 'failure')
+        run: |
+          msg="This PR's openapi/ specs break the frontend typecheck (errors above). Merge only with a coordinated frontend PR that adapts the screens."
+          echo "::error::$msg"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+
+  dispatch:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: notify frontend (${{ inputs.service }} specs on main)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Did openapi/ change?
+        id: changed
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # A new branch or a force push can leave no usable before sha; dispatching then costs one
+          # no-op sync run, missing a change costs a stale frontend.
+          if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "No usable before sha ($BEFORE); treating openapi/ as changed."
+            echo run=true >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "$BEFORE" HEAD -- openapi/)
+          if [ -z "$files" ]; then
+            echo "No file under openapi/ changed; not notifying the frontend."
+            exit 0
+          fi
+          printf 'Changed specs:\n%s\n' "$files"
+          echo run=true >> "$GITHUB_OUTPUT"
+      - name: Send contracts-changed to the frontend
+        if: steps.changed.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          SERVICE: ${{ inputs.service }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::SYNC_TOKEN secret is not set: the frontend picks up these specs only at its daily contract sync."
+            exit 1
+          fi
+          gh api "repos/$OWNER/frontend/dispatches" -f event_type=contracts-changed \
+            -f "client_payload[service]=$SERVICE" -f "client_payload[sha]=$GITHUB_SHA" --silent \
+            || { echo "::error::Could not dispatch to $OWNER/frontend. Check that SYNC_TOKEN covers it with Contents read and write, and has not expired."; exit 1; }
+          echo "contracts-changed -> $OWNER/frontend"

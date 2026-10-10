@@ -2,13 +2,13 @@
 # Runs agents/scripts/sync-agents.sh --local against a throwaway consumer repo built in the old
 # layout (feature-branch skill, older sync script), then hand-edits each generated file and asserts
 # that --check fails on it. A source change that breaks the sync fails here instead of in every
-# repo's daily sync job.
+# repo's sync job.
 #
 #   bash agents/tests/sync-agents.test.sh
 set -uo pipefail
 # The script skips the workflow copy when GITHUB_ACTIONS is set, and the runner sets it. The
-# "outside CI" cases need it unset; the CI case below sets it explicitly.
-unset GITHUB_ACTIONS
+# "outside CI" cases need it unset; the CI cases below set it explicitly.
+unset GITHUB_ACTIONS AGENTS_SYNC_WORKFLOW
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]//\\//}")" && pwd)
 src_root=$(cd "$here/../.." && pwd)
@@ -84,12 +84,19 @@ conflict
 if sync; then bad "conflicted lock must fail" ""; else grep -q 'git checkout --ours agents.lock.json' "$tmp/out" && ok || bad "conflicted lock names the fix" "$(cat "$tmp/out")"; fi
 reset
 
-# In CI the workflow file is left alone: GITHUB_TOKEN may not push it.
+# In CI without SYNC_TOKEN the workflow file is left alone: GITHUB_TOKEN may not push it.
 append .github/workflows/agents.yml '# local'
 g commit -qam wf
 (cd "$repo" && GITHUB_ACTIONS=true bash scripts/sync-agents.sh --local "$src_root") >"$tmp/out" 2>&1
 tail -n 1 "$repo/.github/workflows/agents.yml" | grep -q '# local' && ok || bad "CI sync leaves the workflow" ""
 if sync --check && grep -q 'note: .github/workflows/agents.yml differs' "$tmp/out"; then ok; else bad "workflow drift only warns" "$(cat "$tmp/out")"; fi
+# Only the exact value 1 opts in, so a stray AGENTS_SYNC_WORKFLOW=true cannot break a GITHUB_TOKEN push.
+(cd "$repo" && GITHUB_ACTIONS=true AGENTS_SYNC_WORKFLOW=true bash scripts/sync-agents.sh --local "$src_root") >"$tmp/out" 2>&1
+tail -n 1 "$repo/.github/workflows/agents.yml" | grep -q '# local' && ok || bad "CI sync ignores a flag other than 1" ""
+# With SYNC_TOKEN the job sets the flag and the PR carries the workflow file too.
+(cd "$repo" && GITHUB_ACTIONS=true AGENTS_SYNC_WORKFLOW=1 bash scripts/sync-agents.sh --local "$src_root") >"$tmp/out" 2>&1
+cmp -s "$repo/.github/workflows/agents.yml" "$src_root/agents/workflows/agents.yml" && ok || bad "CI sync with AGENTS_SYNC_WORKFLOW=1 copies the workflow" "$(cat "$tmp/out")"
+if sync --check && ! grep -q 'note: .github/workflows/agents.yml differs' "$tmp/out"; then ok; else bad "no workflow note after the flagged sync" "$(cat "$tmp/out")"; fi
 
 echo "sync: passed $pass, failed $fail"
 ((fail == 0))
