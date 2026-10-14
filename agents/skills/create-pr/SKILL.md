@@ -30,7 +30,7 @@ b=$(git branch --show-current); [[ -z $b || $b == main || $b == chore/sync-* ]] 
    ```
 
 ## Continue
-1. `git fetch origin --prune && git checkout <branch>` (only on the remote: `git checkout --track origin/<branch>`).
+1. `git fetch origin --prune && git checkout <branch>` (only on the remote: `git checkout --track origin/<branch>`). If its PR is already merged, do Start with a new branch instead: a squash merge leaves the branch's own commits off `main`, so rebasing it replays them and conflicts with their squashed copy.
 2. Stash local changes if any, then `git rebase origin/main`.
 3. On conflict: keep both intents. Never hand-merge generated files: take main's side (in a rebase `--ours` is main), regenerate, continue. The `chore/sync-agents` and `chore/sync-contracts` PRs touch these files often.
    ```bash
