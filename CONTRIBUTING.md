@@ -7,7 +7,8 @@ Applies to every repo in the org: `frontend`, `admin-backend`, `transcription-ba
 - Branch names, the PR flow and PR titles: the Guardrails in
   [agents/AGENTS.shared.md](agents/AGENTS.shared.md) and the skill
   [create-pr](agents/skills/create-pr/SKILL.md).
-- Small PRs. Squash-merge. The PR title becomes the commit message.
+- Small PRs. How a PR merges (one squash commit): guardrail 1 in
+  [agents/AGENTS.shared.md](agents/AGENTS.shared.md). The PR title becomes the commit message.
 - CI must be green. `CODEOWNERS` decides reviewers; in `frontend`, each team reviews its own
   `src/features/*`, and both teams review `nginx/` and `contracts/`.
 

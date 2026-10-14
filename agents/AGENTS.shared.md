@@ -8,7 +8,7 @@
 ### Guardrails
 Nothing on GitHub enforces these (no branch protection on our plan), so follow them literally.
 
-1. `main` changes only through a merged PR. Never commit on, push to, or force-push `main`. Never `--no-verify`.
+1. `main` changes only through a merged PR, and every PR merges as one squash commit (`gh pr merge <n> --squash` or "Squash and merge"), however many commits it has; never a merge commit or rebase merge. Never commit on, push to, or force-push `main`. Never `--no-verify`.
 2. Branch: `feat/<member>-<featname>`, member in `andrew jered jeremiah jingkai darryl shana`, featname kebab-case. Example: `feat/shana-claim-long-poll`. The other branches are `chore/sync-agents` and `chore/sync-contracts`, owned by the sync jobs: never commit to them by hand.
 3. Before a PR: `git fetch origin && git rebase origin/main`, run the repo gate on the rebased tree, then an adversarial self-review by your own independent subagents (skill `create-pr`).
 4. Names say what the thing is, units included: `claim_next_job`, `lease_timeout_s`. Not `handle`, `data2`, `utils2.py`.
