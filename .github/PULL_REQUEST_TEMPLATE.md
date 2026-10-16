@@ -9,7 +9,6 @@
 - [ ] **Breaking** for a consumer: the frontend PR bumping `contracts.lock.json` is linked here
 - [ ] **Env** name added/changed: `admin-backend/deploy/.env.example` updated (canonical list)
 - [ ] **Auth/JWT claims** changed: both backends updated and smoke test passes
-- [ ] **GPU job envelope** changed: `contracts/gpu-job.schema.json` updated
 
 ## Security checklist (if touching routes, auth, realtime, or caching)
 
