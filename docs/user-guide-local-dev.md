@@ -34,6 +34,8 @@ Notes:
 open https://localhost:8443        # self-signed cert: accept once
 ```
 
+**Note: **Clear browser cache for localhost if site is stuck on `Loading...`
+
 Log in with the seeded dev user (from `deploy/.env`):
 
 | Field | Value |
