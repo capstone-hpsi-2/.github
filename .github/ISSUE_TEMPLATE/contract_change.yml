@@ -1,5 +1,5 @@
 name: Cross-repo contract change
-description: Propose a change to an API, WebSocket, auth, env, health, or GPU-queue contract
+description: Propose a change to an API, WebSocket, auth, env, or health contract
 labels: [contract]
 body:
   - type: dropdown
@@ -12,7 +12,6 @@ body:
         - JWT claims / JWKS
         - Health shape
         - Env names (.env.example)
-        - GPU job envelope
         - nginx routing (/api, /ai, /ws)
     validations:
       required: true
