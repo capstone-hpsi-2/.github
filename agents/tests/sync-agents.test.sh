@@ -9,6 +9,8 @@ set -uo pipefail
 # The script skips the workflow copy when GITHUB_ACTIONS is set, and the runner sets it. The
 # "outside CI" cases need it unset; the CI cases below set it explicitly.
 unset GITHUB_ACTIONS AGENTS_SYNC_WORKFLOW
+# A machine-wide core.autocrlf=true would make the script write CRLF into the LF repo built below.
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]//\\//}")" && pwd)
 src_root=$(cd "$here/../.." && pwd)
@@ -34,12 +36,13 @@ printf '%s\n' '{' '  "repo": "capstone-hpsi-2/.github",' '  "sha": "BOOTSTRAP",'
 # An older script, so the sync replaces the file it is running from.
 { cat "$src_root/agents/scripts/sync-agents.sh"; printf '# older copy\n'; } >"$repo/scripts/sync-agents.sh"
 
+same() { diff -q --strip-trailing-cr "$1" "$2" >/dev/null; }
 sync() { (cd "$repo" && bash scripts/sync-agents.sh "$@" --local "$src_root") >"$tmp/out" 2>&1; }
 
 if sync; then ok; else bad "first sync" "$(cat "$tmp/out")"; fi
 [[ ! -e $repo/.agents/skills/feature-branch && ! -e $repo/.claude/skills/feature-branch ]] && ok || bad "retired skill removed" "$(ls "$repo/.agents/skills")"
 [[ -f $repo/.claude/skills/local-bench/SKILL.md ]] && ok || bad "repo-local skill mirrored" ""
-cmp -s "$repo/scripts/sync-agents.sh" "$src_root/agents/scripts/sync-agents.sh" && ok || bad "sync script replaced itself" ""
+same "$repo/scripts/sync-agents.sh" "$src_root/agents/scripts/sync-agents.sh" && ok || bad "sync script replaced itself" ""
 [[ -f $repo/.github/workflows/agents.yml ]] && ok || bad "workflow copied outside CI" ""
 grep -q 'old shared text' "$repo/AGENTS.md" && bad "shared block rewritten" "" || ok
 grep -q 'Local rule.' "$repo/AGENTS.md" && ok || bad "specifics kept" ""
@@ -95,8 +98,23 @@ if sync --check && grep -q 'note: .github/workflows/agents.yml differs' "$tmp/ou
 tail -n 1 "$repo/.github/workflows/agents.yml" | grep -q '# local' && ok || bad "CI sync ignores a flag other than 1" ""
 # With SYNC_TOKEN the job sets the flag and the PR carries the workflow file too.
 (cd "$repo" && GITHUB_ACTIONS=true AGENTS_SYNC_WORKFLOW=1 bash scripts/sync-agents.sh --local "$src_root") >"$tmp/out" 2>&1
-cmp -s "$repo/.github/workflows/agents.yml" "$src_root/agents/workflows/agents.yml" && ok || bad "CI sync with AGENTS_SYNC_WORKFLOW=1 copies the workflow" "$(cat "$tmp/out")"
+same "$repo/.github/workflows/agents.yml" "$src_root/agents/workflows/agents.yml" && ok || bad "CI sync with AGENTS_SYNC_WORKFLOW=1 copies the workflow" "$(cat "$tmp/out")"
 if sync --check && ! grep -q 'note: .github/workflows/agents.yml differs' "$tmp/out"; then ok; else bad "no workflow note after the flagged sync" "$(cat "$tmp/out")"; fi
+
+# Git for Windows ships core.autocrlf=true: files are checked out as CRLF, and a sync that writes
+# LF leaves them listed as modified although git diff is empty. A clone with that setting stands in
+# for a Windows checkout on any OS.
+reset
+sync && g add -A && g commit -qm resync
+win="$tmp/win"
+git clone -q -c core.autocrlf=true "$repo" "$win" 2>/dev/null
+wg() { git -C "$win" -c core.autocrlf=true "$@"; }
+[[ $(wg ls-files --eol AGENTS.md) == *w/crlf* ]] && ok || bad "autocrlf clone checks out CRLF" "$(wg ls-files --eol AGENTS.md)"
+if (cd "$win" && bash scripts/sync-agents.sh --local "$src_root") >"$tmp/out" 2>&1; then ok; else bad "sync in an autocrlf clone" "$(cat "$tmp/out")"; fi
+[[ -z $(wg status --porcelain) ]] && ok || bad "autocrlf sync leaves git status clean" "$(wg status --porcelain)"
+eol=$(wg ls-files --eol AGENTS.md .agents/skills/create-pr/SKILL.md .claude/skills/create-pr/SKILL.md scripts/agents-guard.sh)
+[[ $eol != *w/lf* ]] && ok || bad "autocrlf sync writes CRLF, not LF" "$eol"
+if (cd "$win" && bash scripts/sync-agents.sh --check --local "$src_root") >"$tmp/out" 2>&1; then ok; else bad "--check passes on CRLF files" "$(cat "$tmp/out")"; fi
 
 echo "sync: passed $pass, failed $fail"
 ((fail == 0))

@@ -167,6 +167,19 @@ done
 # CR stripped from text files only; grep -I skips binaries such as images.
 to_lf() { find "$@" -type f -exec grep -Il . {} + 2>/dev/null | while IFS= read -r f; do sed -i 's/\r$//' "$f"; done; }
 
+# Rewrites text files in the line endings git would check out for them. LF files in a repo with
+# core.autocrlf=true (the Git for Windows default) are listed by git status as modified while git
+# diff is empty, which left every Windows sync dirty. cat-file --filters applies checkout's own
+# rules (core.autocrlf, core.eol, .gitattributes) to a probe blob: 3 bytes back means CRLF.
+to_native_eol() {
+  local probe
+  probe=$(printf 'a\n' | git hash-object -w --stdin 2>/dev/null) || return 0
+  find "$@" -type f -exec grep -Il . {} + 2>/dev/null | while IFS= read -r f; do
+    (($(git cat-file --filters --path="$f" "$probe" | wc -c) == 3)) && sed -i 's/\r\?$/\r/' "$f"
+    true
+  done
+}
+
 # Render the expected state into $work/out. --check compares it and writes nothing, so a failed
 # check never leaves a half-synced repo.
 out="$work/out"
@@ -275,6 +288,7 @@ rm -rf "${MIRROR:?}"
 mkdir -p "$(dirname "$MIRROR")"
 cp -R "$SRC_SKILLS" "$MIRROR"
 echo "    $MIRROR mirrored from $SRC_SKILLS"
+written=()
 files=("${SYNCED_FILES[@]}")
 [[ -n ${GITHUB_ACTIONS:-} && ${AGENTS_SYNC_WORKFLOW:-} != 1 ]] || files+=("$WORKFLOW")
 for entry in "${files[@]}"; do
@@ -285,6 +299,7 @@ for entry in "${files[@]}"; do
   cp "$out/files/$dest" "$dest.sync-tmp"
   [[ $dest == *.sh ]] && chmod +x "$dest.sync-tmp"
   mv -f "$dest.sync-tmp" "$dest"
+  written+=("$dest")
   echo "    $dest"
 done
 if [[ -n $guard_mode && $guard_mode != 100755 ]]; then
@@ -301,6 +316,7 @@ list=
 for name in $skills; do list+="${list:+, }\"$name\""; done
 sed -i -E "s/(\"skills\"[[:space:]]*:[[:space:]]*)\[[^]]*\]/\1[$list]/" agents.lock.json
 $LATEST && sed -i -E "s/(\"sha\"[[:space:]]*:[[:space:]]*\")[^\"]*\"/\1$sha\"/" agents.lock.json
+to_native_eol AGENTS.md CLAUDE.md agents.lock.json "$SRC_SKILLS" "$MIRROR" "${written[@]}"
 lock=$(read_lock) || { echo "error: agents.lock.json no longer parses after the update" >&2; exit 1; }
 IFS=$'\t' read -r _ new_sha _ new_skills <<<"$lock"
 [[ $new_skills == "$skills" ]] || {
