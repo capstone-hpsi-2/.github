@@ -105,6 +105,8 @@ if sync --check && ! grep -q 'note: .github/workflows/agents.yml differs' "$tmp/
 # LF leaves them listed as modified although git diff is empty. A clone with that setting stands in
 # for a Windows checkout on any OS.
 reset
+# Shell scripts stay LF, as in transcription-backend: bash on Linux cannot run a CRLF script.
+printf '*.sh text eol=lf\n' >"$repo/.gitattributes"
 sync && g add -A && g commit -qm resync
 win="$tmp/win"
 git clone -q -c core.autocrlf=true "$repo" "$win" 2>/dev/null
@@ -112,8 +114,9 @@ wg() { git -C "$win" -c core.autocrlf=true "$@"; }
 [[ $(wg ls-files --eol AGENTS.md) == *w/crlf* ]] && ok || bad "autocrlf clone checks out CRLF" "$(wg ls-files --eol AGENTS.md)"
 if (cd "$win" && bash scripts/sync-agents.sh --local "$src_root") >"$tmp/out" 2>&1; then ok; else bad "sync in an autocrlf clone" "$(cat "$tmp/out")"; fi
 [[ -z $(wg status --porcelain) ]] && ok || bad "autocrlf sync leaves git status clean" "$(wg status --porcelain)"
-eol=$(wg ls-files --eol AGENTS.md .agents/skills/create-pr/SKILL.md .claude/skills/create-pr/SKILL.md scripts/agents-guard.sh)
+eol=$(wg ls-files --eol AGENTS.md .agents/skills/create-pr/SKILL.md .claude/skills/create-pr/SKILL.md)
 [[ $eol != *w/lf* ]] && ok || bad "autocrlf sync writes CRLF, not LF" "$eol"
+[[ $(wg ls-files --eol scripts/agents-guard.sh) == *w/lf* ]] && ok || bad "eol=lf paths stay LF" "$(wg ls-files --eol scripts/agents-guard.sh)"
 if (cd "$win" && bash scripts/sync-agents.sh --check --local "$src_root") >"$tmp/out" 2>&1; then ok; else bad "--check passes on CRLF files" "$(cat "$tmp/out")"; fi
 
 echo "sync: passed $pass, failed $fail"
