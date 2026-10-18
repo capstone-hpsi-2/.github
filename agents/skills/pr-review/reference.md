@@ -60,7 +60,7 @@ Two concurrent claims against Postgres must return different ids.
 `D="git diff origin/main...HEAD"`
 
 **1. Clinical data (P0)**
-- Content in logs or errors: `$D | grep -nE '^\+.*(log(ger)?\.|print\(|console\.(log|error)).*(transcript|segments|text|content|summary|recommendation|name|date_of_birth|goal)'`. `HTTPException(detail=...)` echoing request content is a leak.
+- Content in logs or errors: `$D | grep -nE '^\+.*(log(ger)?\.|print\(|console\.(log|error)).*(transcript|segments|text|content|summary|follow_up|name|date_of_birth|goal)'`. `HTTPException(detail=...)` echoing request content is a leak.
 - Outbound calls: `$D | grep -nE '^\+.*(httpx|requests\.|aiohttp|fetch\(|openai|anthropic)'`. Allowed: worker to our API, worker to Ollama on the same host, API to admin-backend JWKS. A hosted LLM API is a P0.
 - New files under `tests/`: open them; synthetic or public data only.
 - `/ai` responses with clinical data send `Cache-Control: no-store`.
