@@ -36,21 +36,18 @@ open https://localhost:8443        # self-signed cert: accept once
 
 **Note: **Clear browser cache for localhost if site is stuck on `Loading...`
 
-Log in with the seeded dev user (from `deploy/.env`):
+Log in as any seeded dev user (from `deploy/.env`). They all use the password `change-me-dev-only`:
 
-| Field | Value |
-|---|---|
-| Email | `admin@example.com` |
-| Password | `change-me-dev-only` |
-| 2FA (TOTP) | secret `JBSWY3DPEHPK3PXP` in any authenticator app |
+| Level | Email | 2FA (TOTP) |
+|---|---|---|
+| L4 | `admin@example.com` | secret `JBSWY3DPEHPK3PXP` in any authenticator app |
+| L3 | `test-psychologist@example.com` | same secret |
+| L3 | `psy-a@example.com` | enroll your own authenticator at first login |
+| L3 | `psy-b@example.com` | enroll your own authenticator at first login |
+| L2 | `test-l2@example.com` | same secret |
+| L1 | `test-l1@example.com` | same secret |
 
-That account is L4. To test another staff level, log in with the same password and TOTP secret as:
-
-| Level | Email |
-|---|---|
-| L1 | `test-l1@example.com` |
-| L2 | `test-l2@example.com` |
-| L3 | `test-psychologist@example.com` |
+The `psy-*` demo accounts exist only when `DEMO_PSYCHOLOGISTS` is set in `deploy/.env`.
 
 These credentials are public dev defaults for a local stack. Any shared deployment must set its own
 `DEV_USER_PASSWORD` and `DEV_USER_TOTP_SECRET`.
