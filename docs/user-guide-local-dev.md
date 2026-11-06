@@ -44,6 +44,14 @@ Log in with the seeded dev user (from `deploy/.env`):
 | Password | `change-me-dev-only` |
 | 2FA (TOTP) | secret `JBSWY3DPEHPK3PXP` in any authenticator app |
 
+That account is L4. To test another staff level, log in with the same password and TOTP secret as:
+
+| Level | Email |
+|---|---|
+| L1 | `test-l1@example.com` |
+| L2 | `test-l2@example.com` |
+| L3 | `test-psychologist@example.com` |
+
 ## 4. Spot-check by hand
 
 ```bash
