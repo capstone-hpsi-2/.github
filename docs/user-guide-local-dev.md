@@ -52,6 +52,9 @@ That account is L4. To test another staff level, log in with the same password a
 | L2 | `test-l2@example.com` |
 | L3 | `test-psychologist@example.com` |
 
+These credentials are public dev defaults for a local stack. Any shared deployment must set its own
+`DEV_USER_PASSWORD` and `DEV_USER_TOTP_SECRET`.
+
 ## 4. Spot-check by hand
 
 ```bash
