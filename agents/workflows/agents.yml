@@ -4,7 +4,7 @@
 # this is the backstop for edits made outside an agent.
 # sync: adopt the newest capstone-hpsi-2/.github agents/ through one PR on chore/sync-agents.
 # .github sends the agents-changed dispatch when agents/ changes on its main; a push to this
-# repo's main rebuilds the PR on the new base; the weekly run catches a lost dispatch.
+# repo's main that touches agent files rebuilds the PR; the weekly run catches a lost dispatch.
 #
 # The PR is pushed with the SYNC_TOKEN secret (a member's fine-grained PAT), so CI runs on it and
 # it may include this file. Without the secret the job falls back to GITHUB_TOKEN: the PR then
@@ -12,10 +12,12 @@
 name: agents
 
 # The path lists name every file the check reads or the sync rewrites; nothing else in the
-# repo can change their verdict, so a code-only PR or push skips the whole workflow.
+# repo can change their verdict, so a code-only PR or push skips the whole workflow. Any
+# markdown is listed because sync-agents --check matches agent file names case-insensitively.
 on:
   pull_request:
     paths:
+      - "**/*.md"
       - "**/AGENTS.md"
       - "**/CLAUDE.md"
       - "**/GEMINI.md"
@@ -29,6 +31,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "**/*.md"
       - "**/AGENTS.md"
       - "**/CLAUDE.md"
       - "**/GEMINI.md"
