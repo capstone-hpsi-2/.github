@@ -18,7 +18,7 @@ The source of the agent rules, skills and guard files that `admin-backend`, `tra
 
 1. A PR here changes a file in `agents/`. CI runs the guard tests, the sync tests and the skill frontmatter check.
 2. On merge, `.github/workflows/agents-dispatch.yml` here sends the `agents-changed` repository_dispatch to each app repo.
-3. That repo's `agents` workflow pins the new `main` commit, runs the sync and opens or updates one PR on branch `chore/sync-agents`. It runs again on every push to the repo's own `main`, so the PR is rebuilt on the new base and never conflicts, and daily as a backstop for a lost dispatch. Runs queue in one concurrency group.
+3. That repo's `agents` workflow pins the new `main` commit, runs the sync and opens or updates one PR on branch `chore/sync-agents`. It runs again on every push to the repo's own `main` that touches agent files, so the PR is rebuilt on the new base and never conflicts, and weekly as a backstop for a lost dispatch. Runs queue in one concurrency group.
 4. A member reviews and merges that PR; its CI runs like any PR's. Until then the repo keeps the old pin, and its CI checks against it.
 
 Dispatches, cross-repo checkouts and the sync PR use the `SYNC_TOKEN` repo secret, a member's fine-grained PAT with Contents, Pull requests and Workflows read and write on the four repos. Without it the sync falls back to `GITHUB_TOKEN`: the PR leaves `.github/workflows/agents.yml` out and runs no CI until closed and reopened, and the dispatch fails, leaving the daily run.

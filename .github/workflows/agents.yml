@@ -2,10 +2,22 @@
 # everywhere after the next sync. This is the gate before merge.
 name: agents
 
+# The tests exercise only agents/ and this file; a change to the reusable contract workflows
+# cannot affect them.
 on:
   pull_request:
+    paths:
+      - "agents/**"
+      - ".github/workflows/agents.yml"
   push:
     branches: [main]
+    paths:
+      - "agents/**"
+      - ".github/workflows/agents.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
