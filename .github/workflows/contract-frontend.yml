@@ -157,7 +157,7 @@ jobs:
           SERVICE: ${{ inputs.service }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error::SYNC_TOKEN secret is not set: the frontend picks up these specs only at its daily contract sync."
+            echo "::error::SYNC_TOKEN secret is not set: the frontend picks up these specs only at its weekly contract sync."
             exit 1
           fi
           gh api "repos/$OWNER/frontend/dispatches" -f event_type=contracts-changed \
