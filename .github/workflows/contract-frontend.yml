@@ -33,7 +33,7 @@ jobs:
   frontend-typecheck:
     if: github.event_name == 'pull_request'
     name: frontend typecheck (${{ inputs.service }} PR specs)
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     env:
       SERVICE: ${{ inputs.service }}
     steps:
@@ -125,7 +125,7 @@ jobs:
   dispatch:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: notify frontend (${{ inputs.service }} specs on main)
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     steps:
       - uses: actions/checkout@v4
         with:

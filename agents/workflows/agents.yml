@@ -54,7 +54,7 @@ permissions:
 jobs:
   check:
     if: github.event_name == 'pull_request' || github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     concurrency:
       group: agents-check-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -86,7 +86,7 @@ jobs:
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
       github.event_name == 'repository_dispatch' || github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     # A dispatch and a merge to main close together would both push chore/sync-agents. Queued, not
     # cancelled: every run rebuilds the branch from the current main and the newest .github, so
     # the last one to finish is always right.
