@@ -49,7 +49,7 @@ permissions:
 jobs:
   health:
     name: health contract (${{ inputs.service }})
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     env:
       SERVICE: ${{ inputs.service }}
       HEALTH_PATH: ${{ inputs.health-path }}
