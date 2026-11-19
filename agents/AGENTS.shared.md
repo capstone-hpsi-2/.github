@@ -22,6 +22,7 @@ Nothing on GitHub enforces these (no branch protection on our plan), so follow t
 6. No secrets or clinical data (audio, transcripts, note text, names, dates of birth, photos) in the repo, logs, fixtures, commits, issues, PR bodies, or any prompt or request that leaves our servers. Log ids and counts only.
 7. No performance or quality figure (latency, RTF, VRAM, WER, ...) in code, docs or PRs unless measured; cite the results file. Published figures say "published" and link the source.
 8. Agent rules live only in `AGENTS.md` at the repo root, which both Claude Code and Antigravity read. Never write them into `CLAUDE.md`, `GEMINI.md`, `CLAUDE.local.md`, a nested `AGENTS.md`, `.claude/rules/`, `.agents/rules/` or `.agent/rules/`: each is read by only one tool. `CLAUDE.md` contains only `@AGENTS.md`; there is no `GEMINI.md`.
+9. The dev VM's transcription API accepts exactly one worker: IT's production container. Never change `WORKER_TOKEN_SHA256` in the VM's `deploy/.env` and never point another worker at the VM. A changed hash makes every production claim fail with 401, and a second worker takes real sessions because the API gives each job to whichever worker claims first. For GPU testing run `python -m worker.run_local` on JupyterHub (no API, no token); for end to end, merge the worker change and let the production container pull the new image. Only the repo owner rotates the token, together with IT, with `deploy/vm-deploy.sh --rotate-worker-token`.
 
 ### One home per fact
 Each fact lives in one file. Elsewhere, link to it; never restate it.
